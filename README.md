@@ -14,6 +14,7 @@ Hệ thống web tiếp nhận kiến nghị, phản ánh, đề xuất của c�
 | [docs/SAO-LUU-KHOI-PHUC.md](docs/SAO-LUU-KHOI-PHUC.md) | Sao lưu, khôi phục, chính sách lưu trữ |
 | [docs/KIEM-TRA-BAO-MAT.md](docs/KIEM-TRA-BAO-MAT.md) | Danh sách kiểm tra an toàn thông tin trước nghiệm thu |
 | [docs/THAY-URL-QR.md](docs/THAY-URL-QR.md) | Thay địa chỉ, in mã QR |
+| [docs/thuyet-minh/](docs/thuyet-minh/) | Hồ sơ sáng kiến (Đơn đăng ký, Tóm tắt, Thuyết minh) dạng .docx, .pdf và hình minh họa |
 
 ## Chạy nhanh (máy cá nhân)
 ```bash
