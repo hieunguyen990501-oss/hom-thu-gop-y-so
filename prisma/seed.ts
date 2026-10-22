@@ -2,6 +2,7 @@
 // Dùng: npm run db:seed          → dữ liệu nền + quản trị viên đầu tiên
 //       npm run db:seed-demo     → thêm tài khoản, hồ sơ demo và bật chế độ demo
 import fs from "node:fs";
+import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { seedCore } from "./seed-core";
 import { seedDemo } from "./seed-demo";
@@ -9,6 +10,8 @@ import { hashSecret } from "../src/server/auth/password";
 import { randomPassword } from "../src/server/auth/crypto";
 
 const prisma = new PrismaClient();
+// Thư mục ghi tệp mật khẩu tạm (trong Docker: volume runtime, chỉ đọc được từ bên trong máy chủ).
+const outDir = process.env.SEED_OUTPUT_DIR || ".";
 
 async function main() {
   await seedCore(prisma);

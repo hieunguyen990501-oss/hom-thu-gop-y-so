@@ -1,12 +1,15 @@
 "use client";
 // Các thành phần giao diện chạy phía trình duyệt: nút gửi có trạng thái chờ, hộp xác nhận, sao chép, in.
 import { useFormStatus } from "react-dom";
-import { useRef, useState } from "react";
+import { useContext, useRef, useState } from "react";
 import { Check, Copy, Loader2 } from "lucide-react";
 import { cx } from "./index";
+import { PendingContext } from "./action-form";
 
 export function SubmitButton({ children, className = "btn-primary", pendingText = "Đang xử lý...", ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { pendingText?: string }) {
-  const { pending } = useFormStatus();
+  const status = useFormStatus();
+  const ctxPending = useContext(PendingContext);
+  const pending = status.pending || ctxPending;
   return (
     <button type="submit" disabled={pending || rest.disabled} className={className} {...rest}>
       {pending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
@@ -19,7 +22,9 @@ export function SubmitButton({ children, className = "btn-primary", pendingText 
 export function ConfirmSubmit({ children, message, className = "btn-primary", confirmLabel = "Xác nhận" }: { children: React.ReactNode; message: string; className?: string; confirmLabel?: string }) {
   const ref = useRef<HTMLDialogElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const { pending } = useFormStatus();
+  const status = useFormStatus();
+  const ctxPending = useContext(PendingContext);
+  const pending = status.pending || ctxPending;
   return (
     <>
       <button

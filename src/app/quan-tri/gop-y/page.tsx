@@ -124,7 +124,7 @@ export default async function FeedbackListPage({ searchParams }: { searchParams:
                 <thead>
                   <tr>
                     <th>{sortLink("code", "Mã hồ sơ")}</th>
-                    <th>{sortLink("createdAt", "Thời gian gửi")}</th>
+                    <th>{sortLink("createdAt", "Ngày gửi")}</th>
                     <th>Loại ý kiến</th>
                     <th>Lĩnh vực</th>
                     <th>Tiêu đề</th>
@@ -140,16 +140,19 @@ export default async function FeedbackListPage({ searchParams }: { searchParams:
                     const overdue = OPEN_STATUSES.includes(f.status) && f.dueAt && f.dueAt < now;
                     return (
                       <tr key={f.id} className="hover:bg-cream">
-                        <td className="whitespace-nowrap font-mono text-xs font-semibold">{f.code} {f.isDemo && <DemoBadge />}</td>
-                        <td className="whitespace-nowrap text-xs">{formatDateTime(f.createdAt)}</td>
-                        <td className="whitespace-nowrap">{FEEDBACK_TYPE_LABELS[f.type]}</td>
-                        <td>{f.category.name}</td>
-                        <td className="max-w-[280px]"><Link href={`/quan-tri/gop-y/${f.id}`} className="link line-clamp-2">{f.title}</Link></td>
+                        <td className="whitespace-nowrap font-mono text-xs font-semibold">
+                          {f.code}
+                          {f.isDemo && <div className="mt-1"><DemoBadge /></div>}
+                        </td>
+                        <td className="whitespace-nowrap text-xs">{formatDate(f.createdAt)}<br /><span className="text-ink-muted">{formatDateTime(f.createdAt).slice(11)}</span></td>
+                        <td className="text-xs">{FEEDBACK_TYPE_LABELS[f.type]}</td>
+                        <td className="min-w-[120px] text-xs">{f.category.name}</td>
+                        <td className="min-w-[220px]"><Link href={`/quan-tri/gop-y/${f.id}`} className="link line-clamp-2">{f.title}</Link></td>
                         <td><PriorityBadge priority={f.priority} /></td>
                         <td><StatusBadge status={f.status} /></td>
-                        <td className="text-xs">{[f.assignedUser && `${f.assignedUser.rank ?? ""} ${f.assignedUser.fullName}`.trim(), f.assignedUnit?.name].filter(Boolean).join(" – ") || <span className="text-ink-muted">Chưa phân công</span>}</td>
-                        <td className={cx("whitespace-nowrap text-xs", overdue && "font-bold text-brand-700")}>{formatDate(f.dueAt)}{overdue && " (quá hạn)"}</td>
-                        <td><Link href={`/quan-tri/gop-y/${f.id}`} className="btn-outline btn-sm">Xem</Link></td>
+                        <td className="min-w-[120px] text-xs">{[f.assignedUser && `${f.assignedUser.rank ?? ""} ${f.assignedUser.fullName}`.trim(), f.assignedUnit?.name].filter(Boolean).join(" – ") || <span className="text-ink-muted">Chưa phân công</span>}</td>
+                        <td className={cx("whitespace-nowrap text-xs", overdue && "font-bold text-brand-700")}>{formatDate(f.dueAt)}{overdue && <><br />quá hạn</>}</td>
+                        <td><Link href={`/quan-tri/gop-y/${f.id}`} className="btn-outline btn-sm" aria-label={`Xem hồ sơ ${f.code}`}>Xem</Link></td>
                       </tr>
                     );
                   })}

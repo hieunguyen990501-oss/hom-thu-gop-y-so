@@ -3,17 +3,12 @@ export const TZ = "Asia/Ho_Chi_Minh";
 const OFFSET_MS = 7 * 3600_000;
 export const DAY_MS = 86_400_000;
 
+// "22/10/2026 18:14" (giờ Việt Nam)
 export function formatDateTime(d: Date | string | null | undefined): string {
   if (!d) return "—";
-  return new Intl.DateTimeFormat("vi-VN", {
-    timeZone: TZ,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(d));
+  const v = new Date(new Date(d).getTime() + OFFSET_MS);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(v.getUTCDate())}/${p(v.getUTCMonth() + 1)}/${v.getUTCFullYear()} ${p(v.getUTCHours())}:${p(v.getUTCMinutes())}`;
 }
 
 export function formatDate(d: Date | string | null | undefined): string {
