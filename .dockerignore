@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.pgdata
+.pgtest
+backups
+.env
+.env.local
+.demo-accounts.txt
+.initial-admin.txt
+tests
+docs

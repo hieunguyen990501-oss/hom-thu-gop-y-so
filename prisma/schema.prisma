@@ -1,0 +1,414 @@
+// Hòm thư góp ý số - Lữ đoàn Pháo binh 572
+// Lược đồ cơ sở dữ liệu (PostgreSQL). Mọi thay đổi phải đi kèm migration.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────── Phân quyền ─────────────────────────
+
+model Role {
+  id          String           @id @default(cuid())
+  code        String           @unique // ADMIN | RECEIVER | HANDLER | LEADER
+  name        String
+  description String?
+  isSystem    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  permissions RolePermission[]
+  users       User[]
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  name        String
+  group       String
+  roles       RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model OrganizationalUnit {
+  id                 String               @id @default(cuid())
+  code               String               @unique
+  name               String
+  parentId           String?
+  parent             OrganizationalUnit?  @relation("UnitTree", fields: [parentId], references: [id])
+  children           OrganizationalUnit[] @relation("UnitTree")
+  isHandlingUnit     Boolean              @default(false) // bộ phận có thể được giao xử lý
+  isSenderSelectable Boolean              @default(true) // hiển thị trong danh mục "đơn vị công tác" của người gửi
+  isActive           Boolean              @default(true)
+  sortOrder          Int                  @default(0)
+  createdAt          DateTime             @default(now())
+  users              User[]
+  assignedFeedback   Feedback[]           @relation("FeedbackAssignedUnit")
+  assignments        FeedbackAssignment[]
+  senders            FeedbackSender[]
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  username           String    @unique
+  fullName           String
+  rank               String? // cấp bậc
+  position           String? // chức vụ
+  passwordHash       String
+  roleId             String
+  role               Role      @relation(fields: [roleId], references: [id])
+  unitId             String?
+  unit               OrganizationalUnit? @relation(fields: [unitId], references: [id])
+  isActive           Boolean   @default(true)
+  isIndependentContact Boolean @default(false) // đầu mối độc lập tiếp nhận hồ sơ nhạy cảm
+  mustChangePassword Boolean   @default(true)
+  failedLoginCount   Int       @default(0)
+  lockedUntil        DateTime?
+  totpSecretEnc      String? // khóa TOTP đã mã hóa AES-256-GCM
+  totpEnabled        Boolean   @default(false)
+  lastLoginAt        DateTime?
+  passwordChangedAt  DateTime?
+  isDemo             Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  sessions           Session[]
+  categoryScopes     UserCategoryScope[]
+  assignedFeedback   Feedback[]           @relation("FeedbackAssignedUser")
+  assignmentsMade    FeedbackAssignment[] @relation("AssignmentBy")
+  assignmentsTo      FeedbackAssignment[] @relation("AssignmentTo")
+  statusChanges      FeedbackStatusHistory[]
+  responsesAuthored  FeedbackResponse[]   @relation("ResponseAuthor")
+  responsesApproved  FeedbackResponse[]   @relation("ResponseApprover")
+  notes              InternalNote[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+  restrictions       FeedbackAccessRestriction[] @relation("RestrictedUser")
+  restrictionsMade   FeedbackAccessRestriction[] @relation("RestrictionBy")
+  conclusionsApproved Feedback[]          @relation("ConclusionApprover")
+
+  @@index([roleId])
+  @@index([unitId])
+}
+
+// Giới hạn phạm vi lĩnh vực mà một tài khoản được xem (rỗng = toàn bộ).
+model UserCategoryScope {
+  userId     String
+  categoryId String
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category   FeedbackCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([userId, categoryId])
+}
+
+model Session {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique // SHA-256 của token, không lưu token gốc
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mfaPending Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+// ───────────────────────── Góp ý ─────────────────────────
+
+enum FeedbackType {
+  KIEN_NGHI // Kiến nghị
+  PHAN_ANH // Phản ánh
+  DE_XUAT // Đề xuất, sáng kiến
+  GOP_Y_XAY_DUNG // Góp ý xây dựng đơn vị
+  KHAC // Nội dung khác
+}
+
+enum FeedbackStatus {
+  NEW // Mới tiếp nhận
+  CLASSIFYING // Đang phân loại
+  ASSIGNED // Đã phân công
+  IN_PROGRESS // Đang xử lý
+  WAITING_INFO // Chờ bổ sung thông tin
+  PENDING_APPROVAL // Chờ duyệt kết quả
+  RESOLVED // Đã giải quyết
+  CLOSED_NO_ACTION // Kết thúc không xử lý
+  TRANSFERRED // Chuyển đầu mối có thẩm quyền
+}
+
+enum Priority {
+  NORMAL // Thông thường
+  ATTENTION // Cần quan tâm
+  HIGH // Ưu tiên cao
+}
+
+enum Satisfaction {
+  SATISFIED
+  NEUTRAL
+  UNSATISFIED
+}
+
+model FeedbackCategory {
+  id          String     @id @default(cuid())
+  code        String     @unique
+  name        String
+  description String?
+  keywords    String     @default("") // từ khóa gợi ý phân loại, phân tách bằng dấu phẩy
+  slaDays     Int? // thời hạn xử lý riêng (ngày) cho mức Thông thường
+  isActive    Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  feedback    Feedback[] @relation("FeedbackCategory")
+  suggested   Feedback[] @relation("FeedbackSuggestedCategory")
+  scopes      UserCategoryScope[]
+}
+
+model FeedbackCounter {
+  scope   String @id // ví dụ "GY-2026" hoặc "DEMO-2026"
+  lastSeq Int    @default(0)
+}
+
+model Feedback {
+  id                    String         @id @default(cuid())
+  code                  String         @unique // GY-2026-000001
+  type                  FeedbackType
+  categoryId            String
+  category              FeedbackCategory @relation("FeedbackCategory", fields: [categoryId], references: [id])
+  suggestedCategoryId   String?
+  suggestedCategory     FeedbackCategory? @relation("FeedbackSuggestedCategory", fields: [suggestedCategoryId], references: [id])
+  title                 String
+  content               String
+  proposal              String?
+  isAnonymous           Boolean        @default(true)
+  status                FeedbackStatus @default(NEW)
+  priority              Priority       @default(NORMAL)
+  secretHash            String // argon2id của mã bí mật tra cứu
+  lookupFailCount       Int            @default(0)
+  lookupLockedUntil     DateTime?
+  allowSenderInteraction Boolean       @default(true)
+  assignedUnitId        String?
+  assignedUnit          OrganizationalUnit? @relation("FeedbackAssignedUnit", fields: [assignedUnitId], references: [id])
+  assignedUserId        String?
+  assignedUser          User?          @relation("FeedbackAssignedUser", fields: [assignedUserId], references: [id])
+  dueAt                 DateTime?
+  needsLeaderReview     Boolean        @default(false)
+  conclusion            String?
+  closeReason           String?
+  conclusionApprovedById String?
+  conclusionApprovedBy  User?          @relation("ConclusionApprover", fields: [conclusionApprovedById], references: [id])
+  resolvedAt            DateTime?
+  closedAt              DateTime?
+  satisfaction          Satisfaction?
+  satisfactionComment   String?
+  satisfactionAt        DateTime?
+  isDemo                Boolean        @default(false)
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  publicUpdatedAt       DateTime       @default(now()) // lần cập nhật gần nhất người gửi được thấy
+
+  sender                FeedbackSender?
+  assignments           FeedbackAssignment[]
+  history               FeedbackStatusHistory[]
+  responses             FeedbackResponse[]
+  notes                 InternalNote[]
+  messages              FeedbackMessage[]
+  notifications         Notification[]
+  restrictions          FeedbackAccessRestriction[]
+
+  @@index([isDemo, status])
+  @@index([isDemo, createdAt])
+  @@index([categoryId])
+  @@index([type])
+  @@index([assignedUnitId])
+  @@index([assignedUserId])
+  @@index([dueAt])
+}
+
+// Thông tin người gửi được tách riêng và mã hóa; chỉ tồn tại khi người gửi tự nguyện cung cấp.
+model FeedbackSender {
+  id          String   @id @default(cuid())
+  feedbackId  String   @unique
+  feedback    Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  fullNameEnc String?
+  contactEnc  String?
+  unitId      String?
+  unit        OrganizationalUnit? @relation(fields: [unitId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model FeedbackAssignment {
+  id             String    @id @default(cuid())
+  feedbackId     String
+  feedback       Feedback  @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  assignedUnitId String?
+  assignedUnit   OrganizationalUnit? @relation(fields: [assignedUnitId], references: [id])
+  assignedUserId String?
+  assignedUser   User?     @relation("AssignmentTo", fields: [assignedUserId], references: [id])
+  assignedById   String
+  assignedBy     User      @relation("AssignmentBy", fields: [assignedById], references: [id])
+  dueAt          DateTime?
+  note           String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  @@index([feedbackId])
+}
+
+enum ActorType {
+  STAFF
+  SENDER
+  SYSTEM
+}
+
+// Lịch sử xử lý: chỉ ghi thêm, không sửa, không xóa (có trigger bảo vệ ở CSDL).
+model FeedbackStatusHistory {
+  id         String          @id @default(cuid())
+  feedbackId String
+  feedback   Feedback        @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  fromStatus FeedbackStatus?
+  toStatus   FeedbackStatus
+  actorType  ActorType       @default(STAFF)
+  actorId    String?
+  actor      User?           @relation(fields: [actorId], references: [id])
+  note       String? // nội dung cập nhật nội bộ
+  publicNote String? // nội dung được phép hiển thị cho người gửi
+  createdAt  DateTime        @default(now())
+
+  @@index([feedbackId, createdAt])
+}
+
+enum ResponseKind {
+  REQUEST_INFO // yêu cầu bổ sung thông tin
+  ANSWER // trả lời, kết quả giải quyết
+}
+
+enum ResponseStatus {
+  PENDING_APPROVAL
+  PUBLISHED
+  REJECTED
+}
+
+model FeedbackResponse {
+  id           String         @id @default(cuid())
+  feedbackId   String
+  feedback     Feedback       @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  kind         ResponseKind
+  content      String
+  status       ResponseStatus
+  authorId     String
+  author       User           @relation("ResponseAuthor", fields: [authorId], references: [id])
+  approvedById String?
+  approvedBy   User?          @relation("ResponseApprover", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  rejectReason String?
+  publishedAt  DateTime?
+  createdAt    DateTime       @default(now())
+
+  @@index([feedbackId])
+  @@index([status])
+}
+
+// Tin nhắn bổ sung do người gửi gửi qua trang tra cứu (không cần đăng nhập).
+model FeedbackMessage {
+  id         String   @id @default(cuid())
+  feedbackId String
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  content    String
+  createdAt  DateTime @default(now())
+
+  @@index([feedbackId])
+}
+
+model InternalNote {
+  id         String   @id @default(cuid())
+  feedbackId String
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  content    String
+  createdAt  DateTime @default(now())
+
+  @@index([feedbackId])
+}
+
+// Loại trừ quyền truy cập (xung đột lợi ích: người bị phản ánh không được xem hồ sơ).
+model FeedbackAccessRestriction {
+  id          String   @id @default(cuid())
+  feedbackId  String
+  feedback    Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation("RestrictedUser", fields: [userId], references: [id])
+  reason      String
+  createdById String
+  createdBy   User     @relation("RestrictionBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@unique([feedbackId, userId])
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type       String // NEW_FEEDBACK | ASSIGNED | INFO_REQUESTED | SENDER_REPLIED | DUE_SOON | OVERDUE | PENDING_APPROVAL | APPROVED | REJECTED
+  feedbackId String?
+  feedback   Feedback? @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  title      String
+  message    String
+  isRead     Boolean   @default(false)
+  dedupeKey  String?   @unique
+  createdAt  DateTime  @default(now())
+
+  @@index([userId, isRead, createdAt])
+}
+
+// Nhật ký kiểm toán: chỉ ghi thêm (có trigger bảo vệ ở CSDL).
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String?
+  actor      User?    @relation(fields: [actorId], references: [id])
+  actorLabel String? // lưu lại tên đăng nhập tại thời điểm thao tác
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  ipAddress  String? // chỉ ghi với thao tác của cán bộ (đăng nhập, quản trị); không ghi với người gửi góp ý
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([action])
+  @@index([entityType, entityId])
+}
+
+model SystemSetting {
+  key         String   @id
+  value       Json
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+}
+
+model ResponseTemplate {
+  id           String   @id @default(cuid())
+  title        String
+  content      String
+  isApproved   Boolean  @default(false)
+  approvedById String?
+  approvedAt   DateTime?
+  isActive     Boolean  @default(true)
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
