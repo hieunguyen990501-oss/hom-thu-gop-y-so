@@ -12,3 +12,4 @@ next-env.d.ts
 .initial-admin.txt
 coverage/
 ~$*
+docs/thuyet-minh/ma-qr-demo-*.png
