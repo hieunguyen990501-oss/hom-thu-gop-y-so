@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev -p 3000",
     "build": "prisma generate && next build",
-    "vercel-build": "prisma generate && prisma migrate deploy && tsx prisma/seed.ts --demo && next build",
+    "vercel-build": "prisma generate && prisma migrate deploy && DEMO_FIXED_PASSWORD=1 tsx prisma/seed.ts --demo && next build",
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",

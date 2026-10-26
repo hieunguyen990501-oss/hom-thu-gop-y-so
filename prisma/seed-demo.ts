@@ -69,11 +69,13 @@ export async function seedDemo(prisma: PrismaClient): Promise<string[]> {
   const userIds: Record<string, string> = {};
   lines.push("TÀI KHOẢN DEMO (mật khẩu ngẫu nhiên, chỉ dùng cho thử nghiệm; bắt buộc đổi khi đăng nhập lần đầu):");
   for (const a of accounts) {
-    const pw = randomPassword(14);
+    // DEMO_FIXED_PASSWORD: chỉ dùng cho bản trình diễn công khai (tài khoản demo, dữ liệu giả lập).
+    const fixed = process.env.DEMO_FIXED_PASSWORD;
+    const pw = fixed || randomPassword(14);
     const u = await prisma.user.upsert({
       where: { username: a.username },
-      create: { username: a.username, fullName: a.fullName, rank: a.rank || null, position: a.position, roleId: roles[a.role], unitId: units[a.unit], passwordHash: await hashSecret(pw), mustChangePassword: true, isDemo: true },
-      update: { passwordHash: await hashSecret(pw), mustChangePassword: true, isActive: true, failedLoginCount: 0, lockedUntil: null },
+      create: { username: a.username, fullName: a.fullName, rank: a.rank || null, position: a.position, roleId: roles[a.role], unitId: units[a.unit], passwordHash: await hashSecret(pw), mustChangePassword: !fixed, isDemo: true },
+      update: { passwordHash: await hashSecret(pw), mustChangePassword: !fixed, isActive: true, failedLoginCount: 0, lockedUntil: null },
     });
     userIds[a.username] = u.id;
     lines.push(`  ${a.username.padEnd(15)} ${pw}   (${a.position})`);
